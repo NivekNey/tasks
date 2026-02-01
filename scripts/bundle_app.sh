@@ -7,7 +7,10 @@ BUNDLE_NAME="$APP_NAME.app"
 ICON_SOURCE="Resources/AppIcon.png"
 OUTPUT_DIR="."
 
-echo "🚀 Building $APP_NAME..."
+VERSION=${1:-"1.2.0"}
+BUILD=${2:-"1"}
+
+echo "🚀 Building $APP_NAME v$VERSION ($BUILD)..."
 swift build -c release
 
 echo "📦 Creating Bundle Structure..."
@@ -29,9 +32,9 @@ cat > "$OUTPUT_DIR/$BUNDLE_NAME/Contents/Info.plist" <<EOF
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>$VERSION</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>$BUILD</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
