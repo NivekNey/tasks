@@ -68,4 +68,7 @@ fi
 echo "🚚 Copying Executable..."
 cp ".build/release/$EXECUTABLE_NAME" "$OUTPUT_DIR/$BUNDLE_NAME/Contents/MacOS/$EXECUTABLE_NAME"
 
+echo "🔏 Signing Bundle (Ad-hoc)..."
+codesign --force --deep -s - "$OUTPUT_DIR/$BUNDLE_NAME"
+
 echo "✅ Done! App saved to $OUTPUT_DIR/$BUNDLE_NAME"

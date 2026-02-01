@@ -122,7 +122,19 @@ tasks/
 └── Tests/               # Unit tests
 ```
 
-## 5. Build & Run
+## 5. Installation
+
+To install the app from a release:
+
+1.  Download `Tasks.app.zip` from the [Releases page](https://github.com/NivekNey/tasks/releases).
+2.  Unzip the file and move `Tasks.app` to your `/Applications` folder.
+3.  **Important:** Because the app is not signed by an Apple Developer ID, you may see a "damaged" error. Run this command in Terminal to fix it:
+    ```bash
+    xattr -cr /Applications/Tasks.app
+    ```
+4.  Open the app. It will automatically create a `~/my-tasks` directory for your data.
+
+## 6. Build & Run
 
 **Prerequisites**:
 - macOS 14.0+
