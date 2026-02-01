@@ -1,6 +1,8 @@
-# TasksProject
+# Tasks
 
 A native SwiftUI application for managing tasks using local Markdown files.
+
+![screenshot](image.png)
 
 ## 1. Data Specification
 
