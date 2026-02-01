@@ -98,7 +98,6 @@ struct CategoricalCell: View {
                 var newFm = task.frontmatter
                 newFm[key] = text
                 let newTask = Task(
-                    id: task.id,
                     title: task.title,
                     status: task.status,
                     created: task.created,

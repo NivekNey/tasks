@@ -42,19 +42,24 @@ public struct FileSystemDataSource: TaskDataSource {
     public func saveTask(_ task: Task) {
         // Construct file content
         // Note: title is NOT saved in frontmatter - it's derived from filename
+        // Note: id is NOT saved - tasks are identified by their path
         var output = "---\n"
-        output += "id: \"\(task.id)\"\n"
         output += "status: \"\(task.status)\"\n"
         output += "created: \"\(ISO8601DateFormatter().string(from: task.created))\"\n"
+        
+        // Output done datetime if task is completed
+        if let done = task.done {
+            output += "done: \"\(ISO8601DateFormatter().string(from: done))\"\n"
+        }
         
         if !task.tags.isEmpty {
             let tagsStr = task.tags.map { "\"\($0)\"" }.joined(separator: ", ")
             output += "tags: [\(tagsStr)]\n"
         }
         
-        // Add other frontmatter (excluding title which is in filename)
+        // Add other frontmatter (excluding protected fields)
         for (key, value) in task.frontmatter {
-             if !["id", "title", "status", "created", "tags"].contains(key) {
+             if !["id", "title", "status", "created", "done", "tags"].contains(key) {
                  output += "\(key): \"\(value)\"\n"
              }
         }
@@ -75,13 +80,6 @@ public struct FileSystemDataSource: TaskDataSource {
         output += "query: \"\(escapedQuery)\"\n"
         if !view.sort.isEmpty {
              output += "sort: [\"\(view.sort.joined(separator: "\", \""))\"]\n"
-        }
-        
-        // Sanitize columns: remove empties
-        let cleanCols = view.columns.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        if !cleanCols.isEmpty {
-            let colsStr = cleanCols.map { "\"\($0)\"" }.joined(separator: ", ")
-            output += "columns: [\(colsStr)]\n"
         }
         
         output += "---\n"

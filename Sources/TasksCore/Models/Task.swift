@@ -1,7 +1,9 @@
 import Foundation
 
 public struct Task: Identifiable, Equatable, Hashable {
-    public let id: String
+    /// Tasks are uniquely identified by their file path
+    public var id: String { path }
+    
     public let title: String
     public let status: String
     public let created: Date
@@ -13,7 +15,7 @@ public struct Task: Identifiable, Equatable, Hashable {
     
     /// Keys that represent internal task properties and have dedicated UI columns.
     /// Note: "status" is NOT protected—it's managed via schema.json and user-customizable.
-    public static let protectedKeys = Set(["id", "title", "created", "done", "completed", "elapsed", "tags", "completed_at", "due"])
+    public static let protectedKeys = Set(["title", "created", "done", "completed", "elapsed", "tags", "completed_at", "due"])
     
     // MARK: - Title ↔ Filename Conversion
     
@@ -94,6 +96,18 @@ public struct Task: Identifiable, Equatable, Hashable {
         }
     }
     
+    /// Formatted elapsed time since creation (for materialized views)
+    public var elapsedFormatted: String {
+        let end = done ?? Date()
+        let diff = Int(end.timeIntervalSince(created))
+        let days = diff / 86400
+        let hours = (diff % 86400) / 3600
+        let minutes = (diff % 3600) / 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
+    }
+    
     // MARK: - Initialization
     
     public init(path: String, fileContent: String) {
@@ -101,8 +115,6 @@ public struct Task: Identifiable, Equatable, Hashable {
         let parsed = Task.parseFrontmatter(fileContent)
         self.frontmatter = parsed.frontmatter
         self.content = parsed.content
-        
-        self.id = frontmatter["id"] ?? UUID().uuidString
         
         // Title is derived from filename, NOT from frontmatter
         let filename = URL(fileURLWithPath: path).lastPathComponent
@@ -179,7 +191,6 @@ public struct Task: Identifiable, Equatable, Hashable {
         if let t = title { newFm["title"] = t }
         
         return Task(
-            id: self.id,
             title: title ?? self.title,
             status: newStatus,
             created: self.created,
@@ -191,22 +202,8 @@ public struct Task: Identifiable, Equatable, Hashable {
         )
     }
     
-    // Memberwise init for internal/copy use
-    private init(id: String, title: String, status: String, created: Date, done: Date?, tags: [String], path: String, content: String, frontmatter: [String: String]) {
-        self.id = id
-        self.title = title
-        self.status = status
-        self.created = created
-        self.done = done
-        self.tags = tags
-        self.path = path
-        self.content = content
-        self.frontmatter = frontmatter
-    }
-    
-    // Public memberwise init for creation
-    public init(id: String, title: String, status: String, created: Date, done: Date?, tags: [String], path: String, content: String, frontmatter: [String: String], publicInit: Bool = true) {
-        self.id = id
+    // Memberwise init for creation and internal copy
+    public init(title: String, status: String, created: Date, done: Date?, tags: [String], path: String, content: String, frontmatter: [String: String]) {
         self.title = title
         self.status = status
         self.created = created

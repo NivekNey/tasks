@@ -5,7 +5,6 @@ public struct ViewConfig: Identifiable, Equatable, Hashable {
     public var name: String
     public var query: String
     public var sort: [String]
-    public var columns: [String]
     public var path: String
     
     // MARK: - Name ↔ Filename Conversion (same as Task)
@@ -76,25 +75,14 @@ public struct ViewConfig: Identifiable, Equatable, Hashable {
         } else {
             self.sort = []
         }
-        
-        // Parse Columns
-        if let colStr = fm["columns"] {
-             let cleaned = colStr.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-             self.columns = cleaned.split(separator: ",").map { 
-                 $0.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "\""))
-             }
-        } else {
-             self.columns = ["title", "status"]
-        }
     }
     
     // Memberwise init
-    public init(id: String, name: String, query: String, sort: [String], columns: [String], path: String) {
+    public init(id: String, name: String, query: String, sort: [String], path: String) {
         self.id = id
         self.name = name
         self.query = query
         self.sort = sort
-        self.columns = columns
         self.path = path
     }
 }

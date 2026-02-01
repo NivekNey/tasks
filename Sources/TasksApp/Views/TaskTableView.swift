@@ -6,14 +6,15 @@ struct TaskTableView: View {
     let tasks: [Task]
     @Binding var selection: String?
     var columns: [String]
+    var searchQuery: String = ""
     
     private var rows: [TableRow] {
         tasks.map { .task($0) } + [.addNew]
     }
     
     private var dynamicFields: [String] {
-        // Exclude protected keys, id, and status (which has a dedicated fixed column)
-        columns.filter { !Task.protectedKeys.contains($0.lowercased()) && !["id", "status"].contains($0.lowercased()) }
+        // Exclude protected keys and status (which has a dedicated fixed column)
+        columns.filter { !Task.protectedKeys.contains($0.lowercased()) && $0.lowercased() != "status" }
     }
     
     var body: some View {
@@ -41,18 +42,19 @@ struct TaskTableView: View {
             switch row {
             case .task(let task): StatusCell(store: store, task: task)
             case .addNew: 
-                Button(action: { store.createTask() }) {
-                    Label("New Task", systemImage: "plus.circle")
-                        .foregroundColor(.accentColor)
-                }
-                .buttonStyle(.plain)
+                // Ghost row shows empty status icon
+                Image(systemName: "circle.dashed")
+                    .foregroundColor(.secondary.opacity(0.5))
             }
         }
         .width(min: 80, ideal: 120)
         
         TableColumn("Title") { (row: TableRow) in
-            if case .task(let task) = row {
+            switch row {
+            case .task(let task):
                 TitleCell(store: store, task: task)
+            case .addNew:
+                GhostTitleCell(store: store)
             }
         }
         .width(min: 200, ideal: 400)
@@ -244,7 +246,7 @@ struct GenericTextCell: View {
         guard localText != (task.frontmatter[key] ?? "") else { return }
         var newFm = task.frontmatter
         newFm[key] = localText
-        let newTask = Task(id: task.id, title: task.title, status: task.status, created: task.created, done: task.done, tags: task.tags, path: task.path, content: task.content, frontmatter: newFm)
+        let newTask = Task(title: task.title, status: task.status, created: task.created, done: task.done, tags: task.tags, path: task.path, content: task.content, frontmatter: newFm)
         store.updateTask(newTask)
     }
 }
@@ -291,5 +293,79 @@ struct TitleCell: View {
     private func saveIfChanged() {
         guard localTitle != task.title else { return }
         store.updateTask(task.with(title: localTitle))
+    }
+}
+
+// MARK: - Search Highlighting
+
+/// Creates an AttributedString with search matches highlighted
+func highlightedText(_ text: String, matching query: String) -> AttributedString {
+    guard !query.isEmpty else {
+        return AttributedString(text)
+    }
+    
+    var attributed = AttributedString(text)
+    let lowerText = text.lowercased()
+    let lowerQuery = query.lowercased()
+    
+    var searchStart = lowerText.startIndex
+    while let range = lowerText.range(of: lowerQuery, range: searchStart..<lowerText.endIndex) {
+        // Convert String.Index to AttributedString.Index
+        if let attrRange = Range(NSRange(range, in: text), in: attributed) {
+            attributed[attrRange].backgroundColor = .yellow.opacity(0.4)
+            attributed[attrRange].foregroundColor = .black
+        }
+        searchStart = range.upperBound
+    }
+    
+    return attributed
+}
+
+/// View that displays text with search highlighting
+struct HighlightedTextView: View {
+    let text: String
+    let query: String
+    var font: Font = .system(size: 13)
+    var foregroundColor: Color = .primary
+    
+    var body: some View {
+        if query.isEmpty {
+            Text(text)
+                .font(font)
+                .foregroundColor(foregroundColor)
+        } else {
+            Text(highlightedText(text, matching: query))
+                .font(font)
+        }
+    }
+}
+
+// MARK: - Ghost Title Cell (for new task creation)
+
+/// A ghost row that creates a new task when the user types a title
+struct GhostTitleCell: View {
+    @ObservedObject var store: Store
+    @State private var title: String = ""
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        TextField("New task...", text: $title)
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .foregroundColor(.secondary)
+            .focused($isFocused)
+            .onSubmit { createTask() }
+            .onChange(of: isFocused) {
+                if !isFocused && !title.isEmpty {
+                    createTask()
+                }
+            }
+    }
+    
+    private func createTask() {
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        store.createTask(title: trimmed)
+        title = "" // Reset for next ghost row
     }
 }

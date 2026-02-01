@@ -20,10 +20,10 @@ Every task corresponds to a single `.md` file in the root `tasks/` directory.
 **Fields:**
 | Field | Type | Storage | Notes |
 | :--- | :--- | :--- | :--- |
-| `id` | UUID String | Frontmatter | Immutable identifier. |
 | `title` | String | Filename | Derived from filename (dashes -> spaces). |
 | `status` | String | Frontmatter | Default: `todo`, `in-progress`, `done`. |
 | `created` | ISO8601 Date | Frontmatter | Creation timestamp. |
+| `done` | ISO8601 Date | Frontmatter | Completion timestamp. Auto-set when status → done. |
 | `tags` | [String] | Frontmatter | *Model support only.* Indexed for search (`#tag`), not editable in UI. |
 | `[custom]` | String | Frontmatter | User-defined schema fields. |
 
@@ -41,7 +41,8 @@ Views are persistent queries saved as `.md` files in the `views/` directory.
 | `type` | String | Constant `"view"`. |
 | `query` | String | Filter logic (see §3 Query Engine). |
 | `sort` | [String] | Array of `"field direction"` (e.g., `["created desc"]`). |
-| `columns`| [String] | Ordered list of field keys to display. |
+
+*Note: The materialized table uses fixed columns (status, title, created, done, elapsed) plus dynamic columns from `schema.json`.*
 
 ## 2. Schema System
 
@@ -85,30 +86,50 @@ The `QueryEngine` (`QueryEngine.swift`) runs in-memory filtering on the loaded t
 *   `pm == "Justin" and status != done`
 *   `#bug` (Variables starting with `#` search the `tags` array)
 
-## 4. Architecture
+## 4. UI Layout
+
+### 4.1. Toolbar
+The app toolbar is organized as follows:
+*   **Top Left**: View name (current view display).
+*   **Top Center**: Search bar for filtering tasks.
+*   **Top Right**: View controls and settings.
+
+### 4.2. Search
+Global search bar filters the current view's tasks in real-time.
+*   **Shortcut**: `Cmd+F` focuses the search bar.
+*   Searches across all columns displayed in the table.
+*   Uses substring matching (case-insensitive).
+*   Filters rows, keeping only those with matches.
+*   **Highlights** matching substrings in table cells.
+*   Resets when switching views.
+
+### 4.3. Materialized View Output
+When a `ViewConfig` is materialized to disk, the markdown file body contains a table matching the app's table view. Columns are determined by the global `schema.order` from `schema.json`, ensuring consistency between UI and file output.
+
+## 5. Architecture
 
 The app follows a Unidirectional Data Flow architecture managed by `Store.swift`.
 
-### 4.1. Core Components
+### 5.1. Core Components
 *   **Store**: Central state container. ObservableObject.
 *   **FileWatcher**: Monitors filesystem events (add/modify/delete) and triggers Store reloads.
 *   **TaskIndexEngine**: Parses raw files into `Task` structs.
 *   **SchemaEngine**: Manages `schema.json` persistence.
 *   **ViewProcessingEngine**: Evaluates queries and writes materialized view tables.
 
-### 4.2. Write Lifecycle
+### 5.2. Write Lifecycle
 1.  **UI Event**: User edits a field.
 2.  **Optimistic Update**: Store updates the in-memory `Task` immediately.
 3.  **Async Write**: `FileSystemDataSource` writes the changes to disk.
 4.  **Debounce**: Rapid edits (e.g., typing) are debounced to prevent file thrashing.
 
-### 4.3. Reading Lifecycle
+### 5.3. Reading Lifecycle
 1.  **File System Event**: `FileWatcher` detects change.
 2.  **Coalesce**: Multiple events are grouped (200ms window).
 3.  **Reload**: Store re-reads affected files.
 4.  **Diff**: UI updates only if data changed.
 
-### 4.4. Project Structure
+### 5.4. Project Structure
 
 ```
 tasks/
@@ -122,7 +143,7 @@ tasks/
 └── Tests/               # Unit tests
 ```
 
-## 5. Installation
+## 6. Installation
 
 To install the app from a release:
 
@@ -134,7 +155,7 @@ To install the app from a release:
     ```
 4.  Open the app. It will automatically create a `~/my-tasks` directory for your data.
 
-## 6. Build & Run
+## 7. Build & Run
 
 **Prerequisites**:
 - macOS 14.0+

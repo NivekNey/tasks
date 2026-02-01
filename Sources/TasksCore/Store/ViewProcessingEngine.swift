@@ -12,7 +12,7 @@ public class ViewProcessingEngine {
     }
     
     /// Process all views with given tasks
-    public func processAll(views: [ViewConfig], tasks: [Task], rootPath: String) {
+    public func processAll(views: [ViewConfig], tasks: [Task], schema: WorkspaceSchema, rootPath: String) {
         let affectedViews = views.filter { $0.id != "all" }
         guard !affectedViews.isEmpty else {
             engineState.setIdle()
@@ -21,7 +21,7 @@ public class ViewProcessingEngine {
         
         for view in affectedViews {
             engineState.setBusy("Updating \(view.name)")
-            materialize(view: view, tasks: tasks, rootPath: rootPath)
+            materialize(view: view, tasks: tasks, schema: schema, rootPath: rootPath)
         }
         
         engineState.setIdle()
@@ -45,7 +45,7 @@ public class ViewProcessingEngine {
     }
     
     /// Process only views affected by changed tasks
-    public func processAffected(views: [ViewConfig], changedTasks: [Task], allTasks: [Task], rootPath: String) {
+    public func processAffected(views: [ViewConfig], changedTasks: [Task], allTasks: [Task], schema: WorkspaceSchema, rootPath: String) {
         let affectedViews = views.filter { view in
             view.id != "all" && shouldProcess(view: view, changedTasks: changedTasks, allTasks: allTasks)
         }
@@ -57,7 +57,7 @@ public class ViewProcessingEngine {
         
         for view in affectedViews {
             engineState.setBusy("Updating \(view.name)")
-            materialize(view: view, tasks: allTasks, rootPath: rootPath)
+            materialize(view: view, tasks: allTasks, schema: schema, rootPath: rootPath)
         }
         
         engineState.setIdle()
@@ -94,6 +94,12 @@ public class ViewProcessingEngine {
                 case "title": return task.title
                 case "status": return task.statusLabel
                 case "created": return formatDate(task.created)
+                case "done": 
+                    if let done = task.done {
+                        return formatDate(done)
+                    }
+                    return ""
+                case "elapsed": return task.elapsedFormatted
                 case "tags": return task.tags.joined(separator: ", ")
                 case "phase": return task.phase
                 default: return task.frontmatter[col] ?? ""
@@ -106,9 +112,20 @@ public class ViewProcessingEngine {
     }
     
     /// Materialize a view to its file
-    public func materialize(view: ViewConfig, tasks: [Task], rootPath: String) {
+    public func materialize(view: ViewConfig, tasks: [Task], schema: WorkspaceSchema, rootPath: String) {
         let filtered = filterAndSort(view: view, tasks: tasks)
-        let table = generateTable(tasks: filtered, columns: view.columns)
+        
+        // Use schema.order for columns, with fixed columns first
+        // Include derived columns (done, elapsed) after created
+        let fixedColumns = ["status", "title", "created", "done", "elapsed"]
+        let dynamicColumns = schema.order.filter { 
+            !Task.protectedKeys.contains($0.lowercased()) && 
+            $0.lowercased() != "status" &&
+            !["done", "elapsed"].contains($0.lowercased())
+        }
+        let columns = fixedColumns + dynamicColumns
+        
+        let table = generateTable(tasks: filtered, columns: columns)
         
         // Build file content
         // Note: name is NOT saved in frontmatter - it's derived from filename
@@ -123,11 +140,8 @@ public class ViewProcessingEngine {
             output += "sort: [\"\(view.sort.joined(separator: "\", \""))\"]\n"
         }
         
-        let cleanCols = view.columns.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        if !cleanCols.isEmpty {
-            let colsStr = cleanCols.map { "\"\($0)\"" }.joined(separator: ", ")
-            output += "columns: [\(colsStr)]\n"
-        }
+        // Add updated timestamp
+        output += "updated: \"\(ISO8601DateFormatter().string(from: Date()))\"\n"
         
         output += "---\n"
         output += "# \(view.name)\n\n"

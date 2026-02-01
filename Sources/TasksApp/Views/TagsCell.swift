@@ -36,7 +36,6 @@ struct TagsCell: View {
         // Use store.updateTask but we need a way to update specifically tags
         // The Task struct is immutable, we create a new one
         let newTask = Task(
-            id: task.id,
             title: task.title,
             status: task.status,
             created: task.created,

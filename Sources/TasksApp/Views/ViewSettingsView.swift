@@ -132,7 +132,6 @@ struct ViewSettingsView: View {
             name: name.isEmpty ? "Untitled" : name,
             query: query,
             sort: sortArr,
-            columns: viewConfig.columns.isEmpty ? ["title", "status", "created"] : viewConfig.columns,
             path: viewConfig.path
         )
         

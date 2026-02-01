@@ -34,14 +34,30 @@ struct TasksApp: App {
                     store.loadAll(rootPath: rootPath)
                 }
         }
+        .commands {
+            CommandGroup(after: .textEditing) {
+                Button("Find...") {
+                    NotificationCenter.default.post(name: .focusSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+        }
     }
 }
+
+// Notification for focusing search
+extension Notification.Name {
+    static let focusSearch = Notification.Name("focusSearch")
+}
+
 
 struct ContentView: View {
     @ObservedObject var store: Store
     @State private var selectedViewId: String? = "all"
     @State private var selectedTag: String? // Unused directly, mapped via viewId
     @State private var selectedTaskId: String?
+    @State private var searchText: String = ""
+    @State private var shouldFocusSearch: Bool = false
     
     // Computed with side-effects (not ideal but quick) or validation hook
     // Let's separate derivation and validation.
@@ -92,11 +108,45 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 validateCurrentView(tasks: store.tasks)
             }
-            
-            return result
+        } else {
+            result = SortEngine.sort(result, by: ["created desc"])
         }
         
-        return SortEngine.sort(result, by: ["created desc"])
+        // Apply search filter if there's a search query
+        if !searchText.isEmpty {
+            result = result.filter { task in
+                matchesSearch(task: task, query: searchText)
+            }
+        }
+        
+        // Default sort for "all" view
+        if id == "all" {
+            result = SortEngine.sort(result, by: ["created desc"])
+        }
+        
+        return result
+    }
+    
+    /// Check if task matches search query (case-insensitive substring match across all columns)
+    private func matchesSearch(task: Task, query: String) -> Bool {
+        let lowerQuery = query.lowercased()
+        
+        // Search title
+        if task.title.lowercased().contains(lowerQuery) { return true }
+        
+        // Search status
+        if task.status.lowercased().contains(lowerQuery) { return true }
+        if task.statusLabel.lowercased().contains(lowerQuery) { return true }
+        
+        // Search all frontmatter (custom fields)
+        for (_, value) in task.frontmatter {
+            if value.lowercased().contains(lowerQuery) { return true }
+        }
+        
+        // Search tags
+        if task.tags.joined(separator: " ").lowercased().contains(lowerQuery) { return true }
+        
+        return false
     }
 
     
@@ -139,21 +189,32 @@ struct ContentView: View {
                 if selectedViewId == "schema" {
                     SchemaView(store: store)
                 } else {
-                    TaskTableView(store: store, tasks: filteredTasks, selection: $selectedTaskId, columns: currentViewColumns)
+                    TaskTableView(store: store, tasks: filteredTasks, selection: $selectedTaskId, columns: currentViewColumns, searchQuery: searchText)
                         .id("\(selectedViewId ?? "none")-\(currentViewColumns.count)")
                 }
             }
+            .navigationTitle(currentViewName)
             .toolbar {
+                
+                // Top Center: Search bar
                 ToolbarItem(placement: .principal) {
-                    if let id = selectedViewId, let binding = bindingForView(id) {
-                        TextField("View Name", text: binding.name)
-                            .font(.headline)
-                            .frame(maxWidth: 200)
-                            .multilineTextAlignment(.center)
-                    } else {
-                        Text(currentViewName)
-                            .font(.headline)
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.secondary)
+                        FocusableTextField(text: $searchText, placeholder: "Search...", shouldFocus: $shouldFocusSearch)
+                            .frame(width: 200)
+                        if !searchText.isEmpty {
+                            Button(action: { searchText = "" }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color(nsColor: .textBackgroundColor).opacity(0.5))
+                    .cornerRadius(6)
                 }
                 
                 ToolbarItem(placement: .primaryAction) {
@@ -181,6 +242,10 @@ struct ContentView: View {
         .safeAreaInset(edge: .bottom) {
             StatusBarView(engineState: store.engineState)
         }
+        .onChange(of: selectedViewId) {
+            // Reset search when switching views
+            searchText = ""
+        }
         .onChange(of: selectedTaskId) {
             // Request: "maybe don't auto open/close task view"
             // So we do nothing here, or only OPEN if explicit?
@@ -190,6 +255,9 @@ struct ContentView: View {
             // Previous behavior: `if selected != nil { isInspectorPresented = true }`
             // Current Request: "make it explicit".
             // So we remove the auto-open.
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .focusSearch)) { _ in
+            shouldFocusSearch = true
         }
     }
     
@@ -206,6 +274,57 @@ struct ContentView: View {
         case "done", "completed": return .green
         case "in-progress", "doing": return .blue
         default: return .gray
+        }
+    }
+}
+
+// MARK: - FocusableTextField
+
+/// A TextField that can be programmatically focused using NSViewRepresentable
+struct FocusableTextField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+    @Binding var shouldFocus: Bool
+    
+    func makeNSView(context: Context) -> NSTextField {
+        let textField = NSTextField()
+        textField.placeholderString = placeholder
+        textField.isBordered = false
+        textField.backgroundColor = .clear
+        textField.focusRingType = .none
+        textField.font = .systemFont(ofSize: 13)
+        textField.delegate = context.coordinator
+        return textField
+    }
+    
+    func updateNSView(_ nsView: NSTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+        
+        if shouldFocus {
+            DispatchQueue.main.async {
+                nsView.window?.makeFirstResponder(nsView)
+                shouldFocus = false
+            }
+        }
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: FocusableTextField
+        
+        init(_ parent: FocusableTextField) {
+            self.parent = parent
+        }
+        
+        func controlTextDidChange(_ obj: Notification) {
+            if let textField = obj.object as? NSTextField {
+                parent.text = textField.stringValue
+            }
         }
     }
 }

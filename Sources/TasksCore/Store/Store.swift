@@ -7,6 +7,10 @@ public class Store: ObservableObject {
     @Published public var schema: WorkspaceSchema = WorkspaceSchema()
     @Published public var fieldCatalogs: [String: Set<String>] = [:]
     
+    /// Per-view column width settings: [viewId: [columnName: width]]
+    /// This is in-memory state only - not persisted to disk
+    @Published public var columnWidths: [String: [String: CGFloat]] = [:]
+    
     // Engine State
     public let engineState = EngineState()
     
@@ -90,7 +94,6 @@ public class Store: ObservableObject {
             counter += 1
         }
         
-        let id = UUID().uuidString
         let date = Date()
         let formatter = ISO8601DateFormatter()
         let dateStr = formatter.string(from: date)
@@ -98,7 +101,6 @@ public class Store: ObservableObject {
         let path = URL(fileURLWithPath: root).appendingPathComponent("tasks").appendingPathComponent(filename).path
         
         let newTask = Task(
-            id: id,
             title: Task.titleFromFilename(filename), 
             status: "todo",
             created: date,
@@ -107,7 +109,6 @@ public class Store: ObservableObject {
             path: path,
             content: "",
             frontmatter: [
-                "id": id,
                 "status": "todo",
                 "created": dateStr
             ]
@@ -141,7 +142,6 @@ public class Store: ObservableObject {
             // Update path
             let newPath = URL(fileURLWithPath: root).appendingPathComponent("tasks").appendingPathComponent(newFilename).path
             updatedTask = Task(
-                id: task.id,
                 title: task.title,
                 status: task.status,
                 created: task.created,
@@ -237,7 +237,7 @@ public class Store: ObservableObject {
             }
             
             // Materialize the view (writes metadata + markdown table to file)
-            self.viewProcessingEngine.materialize(view: updatedConfig, tasks: self.tasks, rootPath: root)
+            self.viewProcessingEngine.materialize(view: updatedConfig, tasks: self.tasks, schema: self.schema, rootPath: root)
         }
     }
     
@@ -257,7 +257,6 @@ public class Store: ObservableObject {
             name: name, 
             query: "", 
             sort: ["created desc"], 
-            columns: ["title", "status"], 
             path: ""
         )
         
@@ -269,7 +268,6 @@ public class Store: ObservableObject {
             name: name, 
             query: "", 
             sort: ["created desc"], 
-            columns: ["title", "status"], 
             path: path
         )
         saveView(config)
@@ -298,7 +296,7 @@ public class Store: ObservableObject {
             }
             
             // Step 3: Process all views (materialize tables)
-            self.viewProcessingEngine.processAll(views: views, tasks: tasks, rootPath: rootPath)
+            self.viewProcessingEngine.processAll(views: views, tasks: tasks, schema: schema, rootPath: rootPath)
             
             // Step 4: Start watching for task changes ONLY
             // Note: We do NOT watch views/ because views are OUTPUT files.
@@ -319,7 +317,7 @@ public class Store: ObservableObject {
                         self.tasks = updatedTasks
                         self.fieldCatalogs = catalogs
                     }
-                    self.viewProcessingEngine.processAll(views: self.views, tasks: updatedTasks, rootPath: rootPath)
+                    self.viewProcessingEngine.processAll(views: self.views, tasks: updatedTasks, schema: self.schema, rootPath: rootPath)
                 }
             }
         }
